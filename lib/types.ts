@@ -1,6 +1,7 @@
 export interface InstagramUser {
   username: string;
   profileUrl: string;
+  userId?: number; // Instagram pk (numeric user ID)
   timestamp?: number; // when they followed / you followed
 }
 

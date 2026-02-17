@@ -11,30 +11,45 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, Search } from "lucide-react";
+import { Copy, Loader2, Search, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 
+interface UserTableUser {
+  username: string;
+  profileUrl: string;
+  userId?: number;
+  timestamp?: number;
+}
+
 interface UserTableProps {
-  users: Array<{ username: string; profileUrl: string; timestamp?: number }>;
+  users: UserTableUser[];
   selectable?: boolean;
   emptyMessage?: string;
+  onUnfollow?: (users: UserTableUser[]) => Promise<{ successCount: number; failCount: number }>;
 }
 
 export function UserTable({
   users,
   selectable = false,
   emptyMessage = "No users to display.",
+  onUnfollow,
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [unfollowing, setUnfollowing] = useState(false);
+  const [unfollowed, setUnfollowed] = useState<Set<string>>(new Set());
 
   const hasTimestamp = users.some((u) => u.timestamp !== undefined);
 
+  const visibleUsers = useMemo(() => {
+    return users.filter((u) => !unfollowed.has(u.username));
+  }, [users, unfollowed]);
+
   const filteredUsers = useMemo(() => {
-    if (!search.trim()) return users;
+    if (!search.trim()) return visibleUsers;
     const query = search.toLowerCase();
-    return users.filter((u) => u.username.toLowerCase().includes(query));
-  }, [users, search]);
+    return visibleUsers.filter((u) => u.username.toLowerCase().includes(query));
+  }, [visibleUsers, search]);
 
   const allFilteredSelected =
     filteredUsers.length > 0 &&
@@ -92,6 +107,51 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
+  const handleUnfollow = async () => {
+    if (!onUnfollow) return;
+
+    const selectedUsers = filteredUsers.filter((u) => selected.has(u.username));
+    if (selectedUsers.length === 0) {
+      toast.error("No users selected");
+      return;
+    }
+
+    const missingIds = selectedUsers.filter((u) => !u.userId);
+    if (missingIds.length > 0) {
+      toast.error(
+        "Some users are missing IDs. Re-import your data using the session cookie method to enable unfollowing."
+      );
+      return;
+    }
+
+    setUnfollowing(true);
+    try {
+      const result = await onUnfollow(selectedUsers);
+      if (result.successCount > 0) {
+        // Remove successfully unfollowed users from view
+        const successUsernames = new Set(
+          selectedUsers.slice(0, result.successCount).map((u) => u.username)
+        );
+        setUnfollowed((prev) => new Set([...prev, ...successUsernames]));
+        setSelected((prev) => {
+          const next = new Set(prev);
+          successUsernames.forEach((u) => next.delete(u));
+          return next;
+        });
+        toast.success(`Unfollowed ${result.successCount} user(s)`);
+      }
+      if (result.failCount > 0) {
+        toast.error(`Failed to unfollow ${result.failCount} user(s)`);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unfollow failed"
+      );
+    } finally {
+      setUnfollowing(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {/* Toolbar */}
@@ -113,6 +173,21 @@ export function UserTable({
               <span className="text-muted-foreground text-sm">
                 {selected.size} selected
               </span>
+              {onUnfollow && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleUnfollow}
+                  disabled={unfollowing}
+                >
+                  {unfollowing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <UserMinus className="size-4" />
+                  )}
+                  {unfollowing ? "Unfollowing..." : "Unfollow Selected"}
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
                 <Copy className="size-4" />
                 Copy Selected
@@ -130,6 +205,13 @@ export function UserTable({
           </Button>
         </div>
       </div>
+
+      {/* Unfollow count */}
+      {unfollowed.size > 0 && (
+        <div className="bg-muted/50 rounded-md px-3 py-2 text-sm">
+          Unfollowed <strong>{unfollowed.size}</strong> user(s) this session.
+        </div>
+      )}
 
       {/* Table */}
       {filteredUsers.length === 0 ? (
