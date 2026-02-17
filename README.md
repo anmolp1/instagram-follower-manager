@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Instagram Follower Manager
+
+A local web app to analyze your Instagram followers and following using Instagram's data export. See who doesn't follow you back, track follower changes over time, and copy profile links for batch unfollowing.
+
+## Features
+
+- **Dashboard** — Overview of follower/following counts, not-following-back, fans, and mutuals
+- **Data Import** — Drag-and-drop upload of Instagram's "Download Your Data" JSON files
+- **Follower Analysis** — Tabbed view to browse Not Following Back, Fans, and Mutuals with search/filter
+- **Select & Copy Links** — Select users who don't follow you back and copy their profile links for manual unfollowing
+- **History Tracking** — Upload multiple exports over time to see who followed/unfollowed you
 
 ## Getting Started
 
-First, run the development server:
+### 1. Get your Instagram data
+
+1. Open Instagram → Settings → Your Activity → Download Your Information
+2. Request your data in **JSON** format
+3. Download and extract the ZIP — you'll need `followers_1.json` and `following.json`
+
+### 2. Run the app
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Upload your data
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Go to the **Upload** page, drag and drop your `followers_1.json` and `following.json` files, and click Upload.
 
-## Learn More
+## Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- [Next.js 16](https://nextjs.org) (App Router)
+- TypeScript
+- [Tailwind CSS v4](https://tailwindcss.com)
+- [shadcn/ui](https://ui.shadcn.com)
+- [Lucide Icons](https://lucide.dev)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+app/
+  page.tsx              # Dashboard
+  upload/page.tsx       # Data import
+  diff/page.tsx         # Follower analysis (tabs)
+  history/page.tsx      # Snapshot history
+  api/
+    upload/route.ts     # File upload & parsing
+    snapshots/route.ts  # List snapshots
+    diff/route.ts       # Compute diffs
+components/
+  nav.tsx               # Navigation bar
+  stats-card.tsx        # Stats display card
+  file-upload.tsx       # Drag-and-drop upload
+  user-table.tsx        # User list with select/filter/copy
+lib/
+  types.ts              # TypeScript types
+  instagram-parser.ts   # Parse Instagram export format
+  storage.ts            # JSON file-based snapshot storage
+  diff.ts               # Follower diff computation
+data/                   # Local snapshots (gitignored)
+```
 
-## Deploy on Vercel
+## Privacy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+All data stays on your machine. No external APIs, no cloud storage — just local JSON files in the `data/` directory.
