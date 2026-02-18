@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Upload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserTable } from "@/components/user-table";
-import { toast } from "sonner";
 
 interface InstagramUser {
   username: string;
@@ -29,27 +28,12 @@ interface SnapshotSummary {
   followingCount: number;
 }
 
-function getSessionCookies(): { sessionId: string; csrfToken: string; dsUserId: string } | null {
-  try {
-    const stored = localStorage.getItem("ig_session");
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    if (parsed.sessionId && parsed.csrfToken && parsed.dsUserId) return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export default function DiffPage() {
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState(true);
-  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
-    setHasSession(getSessionCookies() !== null);
-
     async function fetchData() {
       try {
         const snapshotsRes = await fetch("/api/snapshots");
@@ -82,36 +66,6 @@ export default function DiffPage() {
 
     fetchData();
   }, []);
-
-  const handleUnfollow = useCallback(
-    async (users: InstagramUser[]): Promise<{ successCount: number; failCount: number }> => {
-      const session = getSessionCookies();
-      if (!session) {
-        toast.error(
-          "No session cookies found. Please import your data via the session cookie method on the Upload page first."
-        );
-        return { successCount: 0, failCount: users.length };
-      }
-
-      const res = await fetch("/api/unfollow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...session,
-          users: users.map((u) => ({ username: u.username, userId: u.userId })),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Unfollow request failed");
-      }
-
-      return { successCount: data.successCount, failCount: data.failCount };
-    },
-    []
-  );
 
   if (loading) {
     return (
@@ -147,15 +101,6 @@ export default function DiffPage() {
         <p className="text-muted-foreground mt-1">
           Analyze who follows you back, your fans, and mutual connections.
         </p>
-        {!hasSession && diff.notFollowingBack.length > 0 && (
-          <p className="mt-2 text-sm text-amber-600">
-            To enable batch unfollowing, import your data via the{" "}
-            <Link href="/upload" className="underline">
-              session cookie method
-            </Link>{" "}
-            first.
-          </p>
-        )}
       </div>
 
       <Tabs defaultValue="not-following-back">
@@ -177,9 +122,8 @@ export default function DiffPage() {
         <TabsContent value="not-following-back" className="mt-4">
           <UserTable
             users={diff.notFollowingBack}
-            selectable={true}
+            selectable={false}
             emptyMessage="Everyone you follow is following you back!"
-            onUnfollow={hasSession ? handleUnfollow : undefined}
           />
         </TabsContent>
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Upload, Users, Clock, LogOut, Loader2 } from "lucide-react";
+import { Home, Upload, Users, Clock, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -18,28 +18,28 @@ const navLinks = [
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [hasSession, setHasSession] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const [hasData, setHasData] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
-    setHasSession(localStorage.getItem("ig_session") !== null);
+    fetch("/api/snapshots")
+      .then((res) => res.json())
+      .then((data) => setHasData(Array.isArray(data.snapshots) && data.snapshots.length > 0))
+      .catch(() => setHasData(false));
   }, [pathname]);
 
-  const handleLogout = async () => {
-    setLoggingOut(true);
+  const handleClearData = async () => {
+    setClearing(true);
     try {
-      // Clear server-side snapshots
       await fetch("/api/logout", { method: "POST" });
-      // Clear client-side session
-      localStorage.removeItem("ig_session");
-      setHasSession(false);
-      toast.success("Logged out — all data cleared");
+      setHasData(false);
+      toast.success("All data cleared");
       router.push("/");
       router.refresh();
     } catch {
       toast.error("Failed to clear data");
     } finally {
-      setLoggingOut(false);
+      setClearing(false);
     }
   };
 
@@ -73,21 +73,21 @@ export function Nav() {
           })}
         </div>
 
-        {hasSession && (
+        {hasData && (
           <div className="ml-auto">
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleLogout}
-              disabled={loggingOut}
+              onClick={handleClearData}
+              disabled={clearing}
               className="text-muted-foreground hover:text-foreground gap-2"
             >
-              {loggingOut ? (
+              {clearing ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <LogOut className="size-4" />
+                <Trash2 className="size-4" />
               )}
-              {loggingOut ? "Clearing..." : "Logout"}
+              {clearing ? "Clearing..." : "Clear Data"}
             </Button>
           </div>
         )}
