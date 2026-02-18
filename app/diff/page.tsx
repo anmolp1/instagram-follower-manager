@@ -81,7 +81,8 @@ export default function DiffPage() {
         <TabsContent value="not-following-back" className="mt-4">
           <UserTable
             users={diff.notFollowingBack}
-            selectable={false}
+            selectable={true}
+            showUnfollowScript={true}
             emptyMessage="Everyone you follow is following you back!"
           />
         </TabsContent>

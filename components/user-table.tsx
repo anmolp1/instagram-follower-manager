@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, Loader2, Search, UserMinus } from "lucide-react";
+import { Copy, Search, Terminal } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserTableUser {
@@ -24,32 +24,73 @@ interface UserTableUser {
 interface UserTableProps {
   users: UserTableUser[];
   selectable?: boolean;
+  showUnfollowScript?: boolean;
   emptyMessage?: string;
-  onUnfollow?: (users: UserTableUser[]) => Promise<{ successCount: number; failCount: number }>;
+}
+
+function generateUnfollowScript(usernames: string[]): string {
+  return `// Instagram Bulk Unfollow Script
+// Generated for ${usernames.length} user(s)
+// Paste this into your browser console on instagram.com
+// It will visit each profile and click Unfollow with delays
+
+(async () => {
+  const usernames = ${JSON.stringify(usernames)};
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  let success = 0, fail = 0;
+
+  for (let i = 0; i < usernames.length; i++) {
+    const u = usernames[i];
+    console.log(\`[\${i+1}/\${usernames.length}] Unfollowing \${u}...\`);
+    try {
+      const res = await fetch(\`https://www.instagram.com/api/v1/web/friendships/\${u}/unfollow/\`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-Instagram-AJAX': '1',
+        },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        success++;
+        console.log(\`  ✓ Unfollowed \${u}\`);
+      } else {
+        fail++;
+        console.warn(\`  ✗ Failed \${u} (\${res.status})\`);
+      }
+    } catch(e) {
+      fail++;
+      console.warn(\`  ✗ Error \${u}:\`, e.message);
+    }
+    // Wait 20-30s between unfollows to stay under rate limits
+    if (i < usernames.length - 1) {
+      const wait = 20000 + Math.random() * 10000;
+      console.log(\`  Waiting \${Math.round(wait/1000)}s...\`);
+      await delay(wait);
+    }
+  }
+  console.log(\`Done! ✓ \${success} unfollowed, ✗ \${fail} failed\`);
+})();`;
 }
 
 export function UserTable({
   users,
   selectable = false,
+  showUnfollowScript = false,
   emptyMessage = "No users to display.",
-  onUnfollow,
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
-  const [unfollowing, setUnfollowing] = useState(false);
-  const [unfollowed, setUnfollowed] = useState<Set<string>>(new Set());
 
   const hasTimestamp = users.some((u) => u.timestamp !== undefined);
 
-  const visibleUsers = useMemo(() => {
-    return users.filter((u) => !unfollowed.has(u.username));
-  }, [users, unfollowed]);
-
   const filteredUsers = useMemo(() => {
-    if (!search.trim()) return visibleUsers;
+    if (!search.trim()) return users;
     const query = search.toLowerCase();
-    return visibleUsers.filter((u) => u.username.toLowerCase().includes(query));
-  }, [visibleUsers, search]);
+    return users.filter((u) => u.username.toLowerCase().includes(query));
+  }, [users, search]);
 
   const allFilteredSelected =
     filteredUsers.length > 0 &&
@@ -107,48 +148,15 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
-  const handleUnfollow = async () => {
-    if (!onUnfollow) return;
-
-    const selectedUsers = filteredUsers.filter((u) => selected.has(u.username));
-    if (selectedUsers.length === 0) {
-      toast.error("No users selected");
-      return;
-    }
-
-    const missingIds = selectedUsers.filter((u) => !u.userId);
-    if (missingIds.length > 0) {
-      toast.error(
-        "Some users are missing IDs. Re-import your data using the session cookie method to enable unfollowing."
-      );
-      return;
-    }
-
-    setUnfollowing(true);
+  const copyUnfollowScript = async (usernames: string[]) => {
+    const script = generateUnfollowScript(usernames);
     try {
-      const result = await onUnfollow(selectedUsers);
-      if (result.successCount > 0) {
-        // Remove successfully unfollowed users from view
-        const successUsernames = new Set(
-          selectedUsers.slice(0, result.successCount).map((u) => u.username)
-        );
-        setUnfollowed((prev) => new Set([...prev, ...successUsernames]));
-        setSelected((prev) => {
-          const next = new Set(prev);
-          successUsernames.forEach((u) => next.delete(u));
-          return next;
-        });
-        toast.success(`Unfollowed ${result.successCount} user(s)`);
-      }
-      if (result.failCount > 0) {
-        toast.error(`Failed to unfollow ${result.failCount} user(s)`);
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unfollow failed"
+      await navigator.clipboard.writeText(script);
+      toast.success(
+        `Copied unfollow script for ${usernames.length} user(s). Paste it in your browser console on instagram.com.`
       );
-    } finally {
-      setUnfollowing(false);
+    } catch {
+      toast.error("Failed to copy to clipboard");
     }
   };
 
@@ -173,26 +181,40 @@ export function UserTable({
               <span className="text-muted-foreground text-sm">
                 {selected.size} selected
               </span>
-              {onUnfollow && (
+              {showUnfollowScript && (
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={handleUnfollow}
-                  disabled={unfollowing}
+                  onClick={() =>
+                    copyUnfollowScript(
+                      filteredUsers
+                        .filter((u) => selected.has(u.username))
+                        .map((u) => u.username)
+                    )
+                  }
                 >
-                  {unfollowing ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <UserMinus className="size-4" />
-                  )}
-                  {unfollowing ? "Unfollowing..." : "Unfollow Selected"}
+                  <Terminal className="size-4" />
+                  Copy Unfollow Script
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
                 <Copy className="size-4" />
-                Copy Selected
+                Copy Links
               </Button>
             </>
+          )}
+          {showUnfollowScript && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                copyUnfollowScript(filteredUsers.map((u) => u.username))
+              }
+              disabled={filteredUsers.length === 0}
+            >
+              <Terminal className="size-4" />
+              Copy All Unfollow Script
+            </Button>
           )}
           <Button
             variant="outline"
@@ -205,13 +227,6 @@ export function UserTable({
           </Button>
         </div>
       </div>
-
-      {/* Unfollow count */}
-      {unfollowed.size > 0 && (
-        <div className="bg-muted/50 rounded-md px-3 py-2 text-sm">
-          Unfollowed <strong>{unfollowed.size}</strong> user(s) this session.
-        </div>
-      )}
 
       {/* Table */}
       {filteredUsers.length === 0 ? (
