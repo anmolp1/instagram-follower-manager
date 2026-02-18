@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, Search, Terminal } from "lucide-react";
+import { Copy, ExternalLink, Search, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserTableUser {
@@ -148,12 +148,14 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
-  const copyUnfollowScript = async (usernames: string[]) => {
+  const launchUnfollow = async (usernames: string[]) => {
     const script = generateUnfollowScript(usernames);
     try {
       await navigator.clipboard.writeText(script);
+      window.open("https://www.instagram.com", "_blank");
       toast.success(
-        `Copied unfollow script for ${usernames.length} user(s). Paste it in your browser console on instagram.com.`
+        `Script copied for ${usernames.length} user(s). On the Instagram tab: press F12 → Console → Ctrl+V → Enter`,
+        { duration: 10000 }
       );
     } catch {
       toast.error("Failed to copy to clipboard");
@@ -186,15 +188,15 @@ export function UserTable({
                   variant="destructive"
                   size="sm"
                   onClick={() =>
-                    copyUnfollowScript(
+                    launchUnfollow(
                       filteredUsers
                         .filter((u) => selected.has(u.username))
                         .map((u) => u.username)
                     )
                   }
                 >
-                  <Terminal className="size-4" />
-                  Copy Unfollow Script
+                  <UserMinus className="size-4" />
+                  Unfollow Selected
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
@@ -208,12 +210,12 @@ export function UserTable({
               variant="outline"
               size="sm"
               onClick={() =>
-                copyUnfollowScript(filteredUsers.map((u) => u.username))
+                launchUnfollow(filteredUsers.map((u) => u.username))
               }
               disabled={filteredUsers.length === 0}
             >
-              <Terminal className="size-4" />
-              Copy All Unfollow Script
+              <ExternalLink className="size-4" />
+              Unfollow All
             </Button>
           )}
           <Button
