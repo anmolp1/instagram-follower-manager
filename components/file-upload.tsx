@@ -4,6 +4,9 @@ import { useCallback, useRef, useState } from "react";
 import { Upload, FileJson, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { parseDataExport } from "@/lib/instagram-parser";
+import { saveSnapshot } from "@/lib/client-storage";
+import { Snapshot } from "@/lib/types";
 
 interface FileUploadProps {
   onSuccess?: () => void;
@@ -56,22 +59,30 @@ export function FileUpload({ onSuccess }: FileUploadProps) {
     setIsUploading(true);
 
     try {
-      const formData = new FormData();
-      files.forEach((file) => {
-        formData.append("files", file);
-      });
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "Upload failed");
+      const fileContents: { name: string; content: string }[] = [];
+      for (const file of files) {
+        const text = await file.text();
+        fileContents.push({ name: file.name, content: text });
       }
 
-      toast.success(`Successfully uploaded ${files.length} file(s)`);
+      const { followers, following } = parseDataExport(fileContents);
+
+      if (followers.length === 0 && following.length === 0) {
+        throw new Error("No followers or following data found in the uploaded files");
+      }
+
+      const snapshot: Snapshot = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        followers,
+        following,
+      };
+
+      saveSnapshot(snapshot);
+
+      toast.success(
+        `Imported ${followers.length} followers and ${following.length} following`
+      );
       setFiles([]);
       onSuccess?.();
     } catch (error) {

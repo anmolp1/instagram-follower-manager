@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Upload, Users, Clock, Trash2, Loader2 } from "lucide-react";
+import { Home, Upload, Users, Clock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { getSnapshots, clearAll } from "@/lib/client-storage";
 
 const navLinks = [
   { href: "/", label: "Dashboard", icon: Home },
@@ -19,28 +20,17 @@ export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [hasData, setHasData] = useState(false);
-  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
-    fetch("/api/snapshots")
-      .then((res) => res.json())
-      .then((data) => setHasData(Array.isArray(data.snapshots) && data.snapshots.length > 0))
-      .catch(() => setHasData(false));
+    setHasData(getSnapshots().length > 0);
   }, [pathname]);
 
-  const handleClearData = async () => {
-    setClearing(true);
-    try {
-      await fetch("/api/logout", { method: "POST" });
-      setHasData(false);
-      toast.success("All data cleared");
-      router.push("/");
-      router.refresh();
-    } catch {
-      toast.error("Failed to clear data");
-    } finally {
-      setClearing(false);
-    }
+  const handleClearData = () => {
+    clearAll();
+    setHasData(false);
+    toast.success("All data cleared");
+    router.push("/");
+    router.refresh();
   };
 
   return (
@@ -79,15 +69,10 @@ export function Nav() {
               variant="ghost"
               size="sm"
               onClick={handleClearData}
-              disabled={clearing}
               className="text-muted-foreground hover:text-foreground gap-2"
             >
-              {clearing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              {clearing ? "Clearing..." : "Clear Data"}
+              <Trash2 className="size-4" />
+              Clear Data
             </Button>
           </div>
         )}

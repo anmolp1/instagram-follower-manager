@@ -6,73 +6,27 @@ import { Upload, TrendingUp, TrendingDown, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-interface InstagramUser {
-  username: string;
-  profileUrl: string;
-  timestamp?: number;
-}
-
-interface SnapshotSummary {
-  id: string;
-  createdAt: string;
-  followerCount: number;
-  followingCount: number;
-}
-
-interface HistoryEntry {
-  snapshotId: string;
-  date: string;
-  newFollowers: InstagramUser[];
-  lostFollowers: InstagramUser[];
-  totalFollowers: number;
-  totalFollowing: number;
-}
+import { getSnapshots } from "@/lib/client-storage";
+import { computeHistory } from "@/lib/diff";
+import { HistoryEntry, Snapshot } from "@/lib/types";
 
 export default function HistoryPage() {
-  const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [historyEntries, setHistoryEntries] = useState<Map<string, HistoryEntry>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const snapshotsRes = await fetch("/api/snapshots");
-        const snapshotsData = await snapshotsRes.json();
+    const all = getSnapshots(); // already sorted newest-first
+    setSnapshots(all);
 
-        if (!snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
-          setLoading(false);
-          return;
-        }
-
-        const sorted = snapshotsData.snapshots.sort(
-          (a: SnapshotSummary, b: SnapshotSummary) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        setSnapshots(sorted);
-
-        // Fetch history (diff) for each snapshot that has a predecessor
-        const entries = new Map<string, HistoryEntry>();
-        for (const snapshot of sorted) {
-          try {
-            const diffRes = await fetch(`/api/diff?snapshotId=${snapshot.id}`);
-            const diffData = await diffRes.json();
-            if (diffData.history) {
-              entries.set(snapshot.id, diffData.history);
-            }
-          } catch {
-            // Skip snapshots that fail to fetch
-          }
-        }
-        setHistoryEntries(entries);
-      } catch (error) {
-        console.error("Failed to fetch history data:", error);
-      } finally {
-        setLoading(false);
-      }
+    const entries = new Map<string, HistoryEntry>();
+    for (let i = 0; i < all.length - 1; i++) {
+      const current = all[i];
+      const previous = all[i + 1];
+      entries.set(current.id, computeHistory(current, previous));
     }
-
-    fetchData();
+    setHistoryEntries(entries);
+    setLoading(false);
   }, []);
 
   if (loading) {
@@ -143,11 +97,11 @@ export default function HistoryPage() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <p className="text-muted-foreground text-sm">Followers</p>
-                    <p className="text-2xl font-semibold">{snapshot.followerCount}</p>
+                    <p className="text-2xl font-semibold">{snapshot.followers.length}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-sm">Following</p>
-                    <p className="text-2xl font-semibold">{snapshot.followingCount}</p>
+                    <p className="text-2xl font-semibold">{snapshot.following.length}</p>
                   </div>
 
                   {history && (

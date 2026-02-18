@@ -7,26 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserTable } from "@/components/user-table";
-
-interface InstagramUser {
-  username: string;
-  profileUrl: string;
-  userId?: number;
-  timestamp?: number;
-}
-
-interface DiffResult {
-  notFollowingBack: InstagramUser[];
-  fans: InstagramUser[];
-  mutuals: InstagramUser[];
-}
-
-interface SnapshotSummary {
-  id: string;
-  createdAt: string;
-  followerCount: number;
-  followingCount: number;
-}
+import { getLatestSnapshot } from "@/lib/client-storage";
+import { computeDiff } from "@/lib/diff";
+import { DiffResult } from "@/lib/types";
 
 export default function DiffPage() {
   const [diff, setDiff] = useState<DiffResult | null>(null);
@@ -34,37 +17,13 @@ export default function DiffPage() {
   const [hasData, setHasData] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const snapshotsRes = await fetch("/api/snapshots");
-        const snapshotsData = await snapshotsRes.json();
-
-        if (!snapshotsData.snapshots || snapshotsData.snapshots.length === 0) {
-          setHasData(false);
-          setLoading(false);
-          return;
-        }
-
-        const sorted = snapshotsData.snapshots.sort(
-          (a: SnapshotSummary, b: SnapshotSummary) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        const latest = sorted[0];
-
-        const diffRes = await fetch(`/api/diff?snapshotId=${latest.id}`);
-        const diffData = await diffRes.json();
-
-        if (diffData.diff) {
-          setDiff(diffData.diff);
-        }
-      } catch (error) {
-        console.error("Failed to fetch diff data:", error);
-      } finally {
-        setLoading(false);
-      }
+    const latest = getLatestSnapshot();
+    if (!latest) {
+      setHasData(false);
+    } else {
+      setDiff(computeDiff(latest));
     }
-
-    fetchData();
+    setLoading(false);
   }, []);
 
   if (loading) {
