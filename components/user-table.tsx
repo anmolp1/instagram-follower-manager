@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink, Search, UserMinus } from "lucide-react";
+import { Copy, Download, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserTableUser {
@@ -24,79 +24,28 @@ interface UserTableUser {
 interface UserTableProps {
   users: UserTableUser[];
   selectable?: boolean;
-  showUnfollowScript?: boolean;
+  showDownload?: boolean;
   emptyMessage?: string;
 }
 
-function generateUnfollowScript(usernames: string[]): string {
-  return `// Instagram Bulk Unfollow Script
-// Generated for ${usernames.length} user(s)
-// Paste this into your browser console on instagram.com
-// It will visit each profile and click Unfollow with delays
-
-(async () => {
-  const usernames = ${JSON.stringify(usernames)};
-  const delay = (ms) => new Promise(r => setTimeout(r, ms));
-  let success = 0, fail = 0;
-
-  for (let i = 0; i < usernames.length; i++) {
-    const u = usernames[i];
-    console.log(\`[\${i+1}/\${usernames.length}] Unfollowing \${u}...\`);
-    try {
-      const res = await fetch(\`https://www.instagram.com/api/v1/web/friendships/\${u}/unfollow/\`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-Instagram-AJAX': '1',
-        },
-        credentials: 'include',
-      });
-      if (res.ok) {
-        success++;
-        console.log(\`  ✓ Unfollowed \${u}\`);
-      } else {
-        fail++;
-        console.warn(\`  ✗ Failed \${u} (\${res.status})\`);
-      }
-    } catch(e) {
-      fail++;
-      console.warn(\`  ✗ Error \${u}:\`, e.message);
-    }
-    // Wait 20-30s between unfollows to stay under rate limits
-    if (i < usernames.length - 1) {
-      const wait = 20000 + Math.random() * 10000;
-      console.log(\`  Waiting \${Math.round(wait/1000)}s...\`);
-      await delay(wait);
-    }
-  }
-  console.log(\`Done! ✓ \${success} unfollowed, ✗ \${fail} failed\`);
-})();`;
+function downloadFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function UserTable({
   users,
   selectable = false,
-  showUnfollowScript = false,
+  showDownload = false,
   emptyMessage = "No users to display.",
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
-  const [hasExtension, setHasExtension] = useState(false);
-
-  useEffect(() => {
-    // The Chrome extension's content script sets this attribute
-    // so the app knows it can dispatch events instead of falling back
-    const check = () =>
-      setHasExtension(
-        document.documentElement.hasAttribute("data-ig-extension")
-      );
-    check();
-    // Re-check after a short delay in case the content script loads late
-    const timer = setTimeout(check, 500);
-    return () => clearTimeout(timer);
-  }, []);
 
   const hasTimestamp = users.some((u) => u.timestamp !== undefined);
 
@@ -162,31 +111,11 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
-  const launchUnfollow = async (usernames: string[]) => {
-    if (hasExtension) {
-      // Extension is installed — dispatch event for one-click unfollow
-      window.dispatchEvent(
-        new CustomEvent("ig-unfollow", { detail: { usernames } })
-      );
-      toast.success(
-        `Unfollowing ${usernames.length} user(s)... Check the Instagram tab for progress.`,
-        { duration: 8000 }
-      );
-      return;
-    }
-
-    // Fallback: copy script + open Instagram
-    const script = generateUnfollowScript(usernames);
-    try {
-      await navigator.clipboard.writeText(script);
-      window.open("https://www.instagram.com", "_blank");
-      toast(
-        `Extension not detected — script copied. On the Instagram tab: F12 → Console → Ctrl+V → Enter`,
-        { duration: 10000 }
-      );
-    } catch {
-      toast.error("Failed to copy to clipboard");
-    }
+  const downloadList = (usernames: string[]) => {
+    downloadFile("unfollow_list.txt", usernames.join("\n") + "\n");
+    toast.success(
+      `Downloaded ${usernames.length} usernames. Run: python unfollow.py unfollow_list.txt`
+    );
   };
 
   return (
@@ -210,20 +139,20 @@ export function UserTable({
               <span className="text-muted-foreground text-sm">
                 {selected.size} selected
               </span>
-              {showUnfollowScript && (
+              {showDownload && (
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() =>
-                    launchUnfollow(
+                    downloadList(
                       filteredUsers
                         .filter((u) => selected.has(u.username))
                         .map((u) => u.username)
                     )
                   }
                 >
-                  <UserMinus className="size-4" />
-                  Unfollow Selected
+                  <Download className="size-4" />
+                  Download Selected
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
@@ -232,17 +161,17 @@ export function UserTable({
               </Button>
             </>
           )}
-          {showUnfollowScript && (
+          {showDownload && (
             <Button
               variant="outline"
               size="sm"
               onClick={() =>
-                launchUnfollow(filteredUsers.map((u) => u.username))
+                downloadList(filteredUsers.map((u) => u.username))
               }
               disabled={filteredUsers.length === 0}
             >
-              <ExternalLink className="size-4" />
-              Unfollow All
+              <Download className="size-4" />
+              Download All
             </Button>
           )}
           <Button

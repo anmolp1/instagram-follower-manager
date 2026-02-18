@@ -82,7 +82,7 @@ export default function DiffPage() {
           <UserTable
             users={diff.notFollowingBack}
             selectable={true}
-            showUnfollowScript={true}
+            showDownload={true}
             emptyMessage="Everyone you follow is following you back!"
           />
         </TabsContent>

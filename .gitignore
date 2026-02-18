@@ -42,3 +42,6 @@ next-env.d.ts
 
 # instagram data snapshots
 /data
+
+# unfollow script cookies
+.ig_cookies.json
