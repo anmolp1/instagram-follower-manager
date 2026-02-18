@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -83,6 +83,20 @@ export function UserTable({
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [hasExtension, setHasExtension] = useState(false);
+
+  useEffect(() => {
+    // The Chrome extension's content script sets this attribute
+    // so the app knows it can dispatch events instead of falling back
+    const check = () =>
+      setHasExtension(
+        document.documentElement.hasAttribute("data-ig-extension")
+      );
+    check();
+    // Re-check after a short delay in case the content script loads late
+    const timer = setTimeout(check, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const hasTimestamp = users.some((u) => u.timestamp !== undefined);
 
@@ -149,12 +163,25 @@ export function UserTable({
   };
 
   const launchUnfollow = async (usernames: string[]) => {
+    if (hasExtension) {
+      // Extension is installed — dispatch event for one-click unfollow
+      window.dispatchEvent(
+        new CustomEvent("ig-unfollow", { detail: { usernames } })
+      );
+      toast.success(
+        `Unfollowing ${usernames.length} user(s)... Check the Instagram tab for progress.`,
+        { duration: 8000 }
+      );
+      return;
+    }
+
+    // Fallback: copy script + open Instagram
     const script = generateUnfollowScript(usernames);
     try {
       await navigator.clipboard.writeText(script);
       window.open("https://www.instagram.com", "_blank");
-      toast.success(
-        `Script copied for ${usernames.length} user(s). On the Instagram tab: press F12 → Console → Ctrl+V → Enter`,
+      toast(
+        `Extension not detected — script copied. On the Instagram tab: F12 → Console → Ctrl+V → Enter`,
         { duration: 10000 }
       );
     } catch {

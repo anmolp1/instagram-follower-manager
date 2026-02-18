@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "IG Follower Manager - Unfollow Helper",
+  "version": "1.0",
+  "description": "Enables one-click bulk unfollow from the Instagram Follower Manager app.",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://anmolp1.github.io/instagram-follower-manager/*",
+        "http://localhost:*/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
