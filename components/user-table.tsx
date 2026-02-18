@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, Download, Search } from "lucide-react";
+import { Copy, Search, UserMinus } from "lucide-react";
 import { toast } from "sonner";
+
+const UNFOLLOW_SERVER = "http://localhost:5123";
 
 interface UserTableUser {
   username: string;
@@ -24,24 +26,14 @@ interface UserTableUser {
 interface UserTableProps {
   users: UserTableUser[];
   selectable?: boolean;
-  showDownload?: boolean;
+  showUnfollow?: boolean;
   emptyMessage?: string;
-}
-
-function downloadFile(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function UserTable({
   users,
   selectable = false,
-  showDownload = false,
+  showUnfollow = false,
   emptyMessage = "No users to display.",
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -111,11 +103,35 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
-  const downloadList = (usernames: string[]) => {
-    downloadFile("unfollow_list.txt", usernames.join("\n") + "\n");
-    toast.success(
-      `Downloaded ${usernames.length} usernames. Run: python unfollow.py unfollow_list.txt`
-    );
+  const handleUnfollow = async (usernames: string[]) => {
+    try {
+      const res = await fetch(UNFOLLOW_SERVER, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usernames }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `Server error (${res.status})`);
+      }
+
+      toast.success(
+        `Unfollowing ${usernames.length} user(s) — check your terminal for progress.`,
+        { duration: 8000 }
+      );
+    } catch (e) {
+      if (e instanceof TypeError && e.message.includes("fetch")) {
+        toast.error(
+          "Unfollow server not running. Start it with: python unfollow.py",
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(
+          e instanceof Error ? e.message : "Failed to connect to unfollow server"
+        );
+      }
+    }
   };
 
   return (
@@ -139,20 +155,20 @@ export function UserTable({
               <span className="text-muted-foreground text-sm">
                 {selected.size} selected
               </span>
-              {showDownload && (
+              {showUnfollow && (
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() =>
-                    downloadList(
+                    handleUnfollow(
                       filteredUsers
                         .filter((u) => selected.has(u.username))
                         .map((u) => u.username)
                     )
                   }
                 >
-                  <Download className="size-4" />
-                  Download Selected
+                  <UserMinus className="size-4" />
+                  Unfollow Selected
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
@@ -161,17 +177,17 @@ export function UserTable({
               </Button>
             </>
           )}
-          {showDownload && (
+          {showUnfollow && (
             <Button
               variant="outline"
               size="sm"
               onClick={() =>
-                downloadList(filteredUsers.map((u) => u.username))
+                handleUnfollow(filteredUsers.map((u) => u.username))
               }
               disabled={filteredUsers.length === 0}
             >
-              <Download className="size-4" />
-              Download All
+              <UserMinus className="size-4" />
+              Unfollow All
             </Button>
           )}
           <Button

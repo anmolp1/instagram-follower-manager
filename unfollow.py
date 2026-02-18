@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
-Instagram Bulk Unfollow Script
+Instagram Unfollow Server
 
-Usage:
-  1. Export the unfollow list from the app (Analysis → Download Unfollow List)
-  2. Get your Instagram session cookies from your browser:
-     - Open instagram.com → F12 → Application → Cookies
-     - Copy the values of: sessionid, csrftoken, ds_user_id
-  3. Run:
-     python unfollow.py unfollow_list.txt
+Run this once:
+  python unfollow.py
 
-  The script will prompt you for your cookies on first run and save them
-  locally so you don't have to enter them again.
+It starts a local server on port 5123. The web app sends unfollow
+requests to it directly — just click the button in the app.
+
+First run will prompt for your Instagram cookies.
 """
 
 import json
@@ -19,9 +16,12 @@ import os
 import sys
 import time
 import random
+import threading
 import urllib.request
 import urllib.error
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
+PORT = 5123
 COOKIE_FILE = ".ig_cookies.json"
 
 
@@ -31,10 +31,10 @@ def get_cookies():
         with open(COOKIE_FILE) as f:
             cookies = json.load(f)
             if cookies.get("sessionid") and cookies.get("csrftoken") and cookies.get("ds_user_id"):
-                print(f"Using saved cookies (delete {COOKIE_FILE} to re-enter)")
+                print(f"  Using saved cookies (delete {COOKIE_FILE} to re-enter)")
                 return cookies
 
-    print("Enter your Instagram cookies (from browser DevTools → Application → Cookies):\n")
+    print("\nEnter your Instagram cookies (from browser DevTools → Application → Cookies):\n")
     sessionid = input("  sessionid: ").strip()
     csrftoken = input("  csrftoken: ").strip()
     ds_user_id = input("  ds_user_id: ").strip()
@@ -47,7 +47,7 @@ def get_cookies():
 
     with open(COOKIE_FILE, "w") as f:
         json.dump(cookies, f)
-    print(f"\nCookies saved to {COOKIE_FILE}\n")
+    print(f"\n  Cookies saved to {COOKIE_FILE}\n")
 
     return cookies
 
@@ -73,42 +73,22 @@ def unfollow_user(username, cookies):
                 return True
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            print("    Rate limited! Waiting 5 minutes...")
+            print("      Rate limited! Waiting 5 minutes...")
             time.sleep(300)
-            return unfollow_user(username, cookies)  # retry once
-        print(f"    HTTP {e.code}: {e.reason}")
+            return unfollow_user(username, cookies)
+        print(f"      HTTP {e.code}: {e.reason}")
     except urllib.error.URLError as e:
-        print(f"    Network error: {e.reason}")
+        print(f"      Network error: {e.reason}")
     return False
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python unfollow.py <unfollow_list.txt>")
-        print("\nExport the list from the app: Analysis → Download Unfollow List")
-        sys.exit(1)
-
-    list_file = sys.argv[1]
-    if not os.path.exists(list_file):
-        print(f"File not found: {list_file}")
-        sys.exit(1)
-
-    with open(list_file) as f:
-        usernames = [line.strip() for line in f if line.strip()]
-
-    if not usernames:
-        print("No usernames found in file")
-        sys.exit(1)
-
-    print(f"\nFound {len(usernames)} users to unfollow\n")
-
-    cookies = get_cookies()
-
+def run_unfollow_batch(usernames, cookies):
+    """Run unfollows in the background."""
     success = 0
     fail = 0
 
     for i, username in enumerate(usernames):
-        print(f"[{i + 1}/{len(usernames)}] Unfollowing {username}...", end=" ")
+        print(f"  [{i + 1}/{len(usernames)}] Unfollowing {username}...", end=" ")
         if unfollow_user(username, cookies):
             success += 1
             print("✓")
@@ -116,13 +96,95 @@ def main():
             fail += 1
             print("✗")
 
-        # Wait 20-30s between unfollows
         if i < len(usernames) - 1:
             wait = 20 + random.random() * 10
-            print(f"    Waiting {wait:.0f}s...")
+            print(f"      Waiting {wait:.0f}s...")
             time.sleep(wait)
 
-    print(f"\nDone! ✓ {success} unfollowed, ✗ {fail} failed")
+    print(f"\n  Done! ✓ {success} unfollowed, ✗ {fail} failed\n")
+
+
+class UnfollowHandler(BaseHTTPRequestHandler):
+    cookies = None
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
+    def do_GET(self):
+        """Health check endpoint."""
+        self.send_response(200)
+        self._cors_headers()
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "ready"}).encode())
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+
+        try:
+            data = json.loads(body)
+            usernames = data.get("usernames", [])
+        except (json.JSONDecodeError, AttributeError):
+            self.send_response(400)
+            self._cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode())
+            return
+
+        if not usernames:
+            self.send_response(400)
+            self._cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "No usernames provided"}).encode())
+            return
+
+        print(f"\n  Received request to unfollow {len(usernames)} user(s)")
+
+        # Start unfollowing in background thread
+        thread = threading.Thread(
+            target=run_unfollow_batch,
+            args=(usernames, self.cookies),
+            daemon=True,
+        )
+        thread.start()
+
+        # Return immediately
+        self.send_response(200)
+        self._cors_headers()
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(
+            json.dumps({"started": True, "count": len(usernames)}).encode()
+        )
+
+    def _cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def log_message(self, format, *args):
+        pass  # Suppress default HTTP logging
+
+
+def main():
+    cookies = get_cookies()
+    UnfollowHandler.cookies = cookies
+
+    server = HTTPServer(("127.0.0.1", PORT), UnfollowHandler)
+    print(f"\n  Unfollow server running on http://localhost:{PORT}")
+    print(f"  Click 'Unfollow' in the app — it will just work.\n")
+    print(f"  Press Ctrl+C to stop.\n")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n  Server stopped.")
+        server.server_close()
 
 
 if __name__ == "__main__":
