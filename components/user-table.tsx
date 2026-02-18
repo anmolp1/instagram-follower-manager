@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Copy, Search, UserMinus } from "lucide-react";
+import { Copy, ExternalLink, RotateCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
-const UNFOLLOW_SERVER = "http://localhost:5123";
+const BATCH_SIZE = 5;
 
 interface UserTableUser {
   username: string;
@@ -26,17 +26,18 @@ interface UserTableUser {
 interface UserTableProps {
   users: UserTableUser[];
   selectable?: boolean;
-  showUnfollow?: boolean;
+  showBatchOpen?: boolean;
   emptyMessage?: string;
 }
 
 export function UserTable({
   users,
   selectable = false,
-  showUnfollow = false,
+  showBatchOpen = false,
   emptyMessage = "No users to display.",
 }: UserTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [opened, setOpened] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
   const hasTimestamp = users.some((u) => u.timestamp !== undefined);
@@ -103,36 +104,42 @@ export function UserTable({
     copyLinks(filteredUsers.map((u) => u.username));
   };
 
-  const handleUnfollow = async (usernames: string[]) => {
-    try {
-      const res = await fetch(UNFOLLOW_SERVER, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usernames }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || `Server error (${res.status})`);
-      }
-
-      toast.success(
-        `Unfollowing ${usernames.length} user(s) — check your terminal for progress.`,
-        { duration: 8000 }
-      );
-    } catch (e) {
-      if (e instanceof TypeError && e.message.includes("fetch")) {
-        toast.error(
-          "Unfollow server not running. Start it with: python unfollow.py",
-          { duration: 8000 }
-        );
-      } else {
-        toast.error(
-          e instanceof Error ? e.message : "Failed to connect to unfollow server"
-        );
-      }
-    }
+  // Get the next batch of unopened users from the filtered list
+  const getNextBatch = () => {
+    return filteredUsers
+      .filter((u) => !opened.has(u.username))
+      .slice(0, BATCH_SIZE);
   };
+
+  const openNextBatch = () => {
+    const batch = getNextBatch();
+    if (batch.length === 0) {
+      toast("All profiles have been opened!");
+      return;
+    }
+
+    batch.forEach((u) => {
+      window.open(getProfileLink(u.username), "_blank");
+    });
+
+    setOpened((prev) => {
+      const next = new Set(prev);
+      batch.forEach((u) => next.add(u.username));
+      return next;
+    });
+
+    const remaining = filteredUsers.filter(
+      (u) => !opened.has(u.username) && !batch.find((b) => b.username === u.username)
+    ).length;
+
+    toast.success(
+      `Opened ${batch.length} profile${batch.length > 1 ? "s" : ""}. ${remaining} remaining.`,
+      { duration: 4000 }
+    );
+  };
+
+  const openedCount = filteredUsers.filter((u) => opened.has(u.username)).length;
+  const remainingCount = filteredUsers.length - openedCount;
 
   return (
     <div className="space-y-3">
@@ -155,41 +162,41 @@ export function UserTable({
               <span className="text-muted-foreground text-sm">
                 {selected.size} selected
               </span>
-              {showUnfollow && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() =>
-                    handleUnfollow(
-                      filteredUsers
-                        .filter((u) => selected.has(u.username))
-                        .map((u) => u.username)
-                    )
-                  }
-                >
-                  <UserMinus className="size-4" />
-                  Unfollow Selected
-                </Button>
-              )}
               <Button variant="outline" size="sm" onClick={copySelectedLinks}>
                 <Copy className="size-4" />
                 Copy Links
               </Button>
             </>
           )}
-          {showUnfollow && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                handleUnfollow(filteredUsers.map((u) => u.username))
-              }
-              disabled={filteredUsers.length === 0}
-            >
-              <UserMinus className="size-4" />
-              Unfollow All
-            </Button>
+
+          {showBatchOpen && (
+            <>
+              <Button
+                size="sm"
+                onClick={openNextBatch}
+                disabled={remainingCount === 0}
+              >
+                <ExternalLink className="size-4" />
+                Open Next {Math.min(BATCH_SIZE, remainingCount)}
+              </Button>
+              {openedCount > 0 && (
+                <>
+                  <span className="text-muted-foreground text-sm">
+                    {openedCount}/{filteredUsers.length} opened
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOpened(new Set())}
+                    title="Reset progress"
+                  >
+                    <RotateCcw className="size-4" />
+                  </Button>
+                </>
+              )}
+            </>
           )}
+
           <Button
             variant="outline"
             size="sm"
@@ -201,6 +208,34 @@ export function UserTable({
           </Button>
         </div>
       </div>
+
+      {/* Batch open instructions */}
+      {showBatchOpen && filteredUsers.length > 0 && openedCount === 0 && (
+        <div className="bg-muted/50 rounded-md border px-4 py-3 text-sm">
+          <strong>How to unfollow:</strong> Click{" "}
+          <span className="font-medium">&quot;Open Next {Math.min(BATCH_SIZE, filteredUsers.length)}&quot;</span>{" "}
+          to open profiles in new tabs. Unfollow each one manually, close the tabs, and
+          click again for the next batch. Progress is tracked here.
+        </div>
+      )}
+
+      {/* Progress bar */}
+      {showBatchOpen && openedCount > 0 && (
+        <div className="space-y-1">
+          <div className="bg-muted h-2 overflow-hidden rounded-full">
+            <div
+              className="bg-primary h-full transition-all duration-300"
+              style={{
+                width: `${(openedCount / filteredUsers.length) * 100}%`,
+              }}
+            />
+          </div>
+          <p className="text-muted-foreground text-xs">
+            {openedCount} of {filteredUsers.length} profiles opened
+            {remainingCount > 0 && ` — ${remainingCount} remaining`}
+          </p>
+        </div>
+      )}
 
       {/* Table */}
       {filteredUsers.length === 0 ? (
@@ -223,6 +258,7 @@ export function UserTable({
               <TableHead>Username</TableHead>
               <TableHead>Profile Link</TableHead>
               {hasTimestamp && <TableHead>Date</TableHead>}
+              {showBatchOpen && <TableHead className="w-16">Status</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,6 +266,7 @@ export function UserTable({
               <TableRow
                 key={user.username}
                 data-state={selected.has(user.username) ? "selected" : undefined}
+                className={opened.has(user.username) ? "opacity-50" : ""}
               >
                 {selectable && (
                   <TableCell>
@@ -256,6 +293,13 @@ export function UserTable({
                     {user.timestamp
                       ? new Date(user.timestamp * 1000).toLocaleDateString()
                       : "-"}
+                  </TableCell>
+                )}
+                {showBatchOpen && (
+                  <TableCell>
+                    {opened.has(user.username) ? (
+                      <span className="text-muted-foreground text-xs">Opened</span>
+                    ) : null}
                   </TableCell>
                 )}
               </TableRow>

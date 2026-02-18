@@ -1,90 +1,84 @@
 # Instagram Follower Manager
 
-A local web app to analyze and manage your Instagram followers. See who doesn't follow you back, batch unfollow them, and track follower changes over time.
+A free, privacy-first web app to analyze your Instagram followers. See who doesn't follow you back, find your fans, track changes over time, and batch-open profiles to unfollow — all without risking your account.
+
+**Live app:** [anmolp1.github.io/instagram-follower-manager](https://anmolp1.github.io/instagram-follower-manager/)
 
 ## Features
 
-- **Auto-fetch via session cookie** — Paste your Instagram browser cookies to automatically pull your full followers/following lists
-- **Paste import** — Copy-paste raw text from Instagram's followers/following popup — usernames are extracted automatically
-- **Dashboard** — Overview of follower/following counts, not-following-back, fans, and mutuals
-- **Follower Analysis** — Tabbed view to browse Not Following Back, Fans, and Mutuals with search/filter
-- **Batch Unfollow** — Select users who don't follow you back and unfollow them directly from the app
-- **Copy Profile Links** — Copy selected profile links to clipboard for manual review
-- **History Tracking** — Import data multiple times to track who followed/unfollowed you over time
-- **Logout & Reset** — Clear all session data and saved snapshots with one click
+- **Data export import** — Upload your official Instagram data export (JSON files). No API scraping, no session cookies, no ban risk.
+- **Follower analysis** — See who doesn't follow you back, who your fans are, and your mutual connections.
+- **Batch open profiles** — Open profiles 5 at a time in new tabs to manually unfollow. Progress is tracked in the UI so you can pick up where you left off.
+- **Search and filter** — Quickly find specific users across any list.
+- **Copy profile links** — Copy selected or all profile links to clipboard.
+- **History tracking** — Upload new exports over time to track who followed/unfollowed you.
+- **Fully client-side** — All data stays in your browser's localStorage. Nothing is sent to any server.
 
 ## Getting Started
 
-### 1. Run the app
+### 1. Export your Instagram data
+
+1. Open Instagram → Settings → Your Activity → Download Your Information
+2. Select **JSON** format and request your data
+3. Instagram will email you a download link (usually within a few minutes)
+4. Download and unzip — you need `followers_1.json` and `following.json`
+
+### 2. Upload to the app
+
+1. Go to [the app](https://anmolp1.github.io/instagram-follower-manager/) (or run locally)
+2. Click **Upload** and select your `followers_1.json` and `following.json` files
+3. The app parses everything in your browser — nothing leaves your machine
+
+### 3. Analyze
+
+- **Not Following Back** — People you follow who don't follow you back
+- **Fans** — People who follow you but you don't follow back
+- **Mutuals** — People you follow each other with
+
+### 4. Unfollow
+
+Click **"Open Next 5"** to open profiles in new browser tabs. Unfollow each one manually on Instagram, close the tabs, and click again for the next batch. A progress bar tracks how far along you are.
+
+This is the safest approach — you're using Instagram's real UI with your real session, so there's no risk of your account being flagged or banned.
+
+## Run Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### 2. Import your data
-
-**Option A: Auto-fetch (recommended)**
-
-1. Open [instagram.com](https://www.instagram.com) and make sure you're logged in
-2. Press **F12** → **Application** tab → **Cookies** → **https://www.instagram.com**
-3. Copy the values of `sessionid`, `csrftoken`, and `ds_user_id`
-4. Paste them on the Upload page and click **Fetch My Followers**
-
-**Option B: Paste manually**
-
-1. Open your profile on Instagram → click **Followers**
-2. Scroll to the bottom to load everyone
-3. Select all (Ctrl+A) and copy (Ctrl+C)
-4. Paste into the Followers box on the Upload page
-5. Repeat for **Following**
-
-### 3. Analyze & unfollow
-
-- Go to the **Analysis** page to see who doesn't follow you back
-- Select users and click **Unfollow Selected** to batch unfollow (requires session cookie import)
-- Use **Copy Selected** to copy profile links for manual review
+Open [http://localhost:3000](http://localhost:3000).
 
 ## Tech Stack
 
-- [Next.js 16](https://nextjs.org) (App Router)
+- [Next.js 16](https://nextjs.org) (App Router, static export)
 - TypeScript
 - [Tailwind CSS v4](https://tailwindcss.com)
 - [shadcn/ui](https://ui.shadcn.com)
 - [Lucide Icons](https://lucide.dev)
+- GitHub Pages (hosting)
 
 ## Project Structure
 
 ```
 app/
-  page.tsx                  # Dashboard
-  upload/page.tsx           # Data import (session cookie / paste)
-  diff/page.tsx             # Follower analysis with unfollow
-  history/page.tsx          # Snapshot history
-  api/
-    fetch-session/route.ts  # Fetch via session cookie
-    paste/route.ts          # Parse pasted usernames
-    upload/route.ts         # JSON file upload
-    unfollow/route.ts       # Batch unfollow
-    snapshots/route.ts      # List snapshots
-    diff/route.ts           # Compute diffs
-    logout/route.ts         # Clear all data
+  page.tsx              # Dashboard — overview stats
+  upload/page.tsx       # Upload Instagram data export
+  diff/page.tsx         # Follower analysis with batch open
+  history/page.tsx      # Snapshot history over time
 components/
-  nav.tsx                   # Navigation bar with logout
-  session-import.tsx        # Session cookie input form
-  paste-import.tsx          # Paste usernames form
-  user-table.tsx            # User list with select/filter/unfollow
-  stats-card.tsx            # Dashboard stat card
+  nav.tsx               # Navigation bar with clear data
+  file-upload.tsx       # Drag-and-drop file upload
+  user-table.tsx        # User list with search, select, batch open
+  stats-card.tsx        # Dashboard stat card
 lib/
-  types.ts                  # TypeScript types
-  instagram-parser.ts       # Parse Instagram export format
-  storage.ts                # JSON file-based snapshot storage
-  diff.ts                   # Follower diff computation
-data/                       # Local snapshots (gitignored)
+  types.ts              # TypeScript types
+  instagram-parser.ts   # Parse Instagram export JSON
+  client-storage.ts     # localStorage-based snapshot storage
+  diff.ts               # Follower diff and history computation
 ```
 
 ## Privacy
 
-All data stays on your machine. Session cookies are stored in your browser's localStorage and are only sent directly to Instagram. No third-party services, no cloud storage.
+All data stays in your browser. No server, no cookies, no third-party services. The app is a static site hosted on GitHub Pages — it can't even receive your data if it wanted to. Click **Clear Data** in the nav to wipe everything from localStorage.
